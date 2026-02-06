@@ -46,3 +46,4 @@ class IngestionResponse(BaseModel):
     status: str
     message: str
     correlation_id: str
+    risk_assessment: Optional[str] = "PROCESSING"

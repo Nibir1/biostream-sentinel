@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from app.domain.schemas import TelemetryPayload, IngestionResponse
+from app.services.detector import detector # Import the singleton
 import logging
 
 router = APIRouter()
@@ -7,19 +8,37 @@ logger = logging.getLogger(__name__)
 
 @router.post("/telemetry", response_model=IngestionResponse, status_code=202)
 async def ingest_telemetry(payload: TelemetryPayload, request: Request):
-    """
-    Ingests wearable telemetry data.
-    
-    - **Validation**: Enforced by Pydantic. Invalid data returns 422.
-    - **Processing**: (Future) Async dispatch to Kafka/Queue.
-    """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
     
-    # In Phase 4, we will pass this payload to the Anomaly Detector
-    logger.info(f"Received valid telemetry from {payload.device_id}", extra={"correlation_id": correlation_id})
+    # 1. AI Analysis
+    # We run this synchronously here for simplicity. 
+    # In high-scale production, this would be offloaded to a background worker.
+    analysis = detector.predict(
+        payload.heart_rate, 
+        payload.spo2, 
+        payload.battery_level
+    )
+    
+    risk_level = analysis["risk_level"]
+    
+    # 2. Logging with Context
+    log_payload = {
+        "correlation_id": correlation_id,
+        "device_id": payload.device_id,
+        "risk": risk_level,
+        "score": f"{analysis['anomaly_score']:.4f}"
+    }
+    
+    # FORCE PRINT TO CONSOLE FOR DEMO PURPOSES
+    if risk_level == "HIGH":
+        print(f"🚨 [ALERT] High Risk Detected! Device: {payload.device_id} | HR: {payload.heart_rate} | Score: {log_payload['score']}")
+        logger.warning(f"ANOMALY DETECTED: {payload.device_id}", extra=log_payload)
+    else:
+        logger.info(f"Telemetry Accepted", extra=log_payload)
     
     return IngestionResponse(
         status="accepted",
-        message="Telemetry queued for processing",
-        correlation_id=correlation_id
+        message="Telemetry processed",
+        correlation_id=correlation_id,
+        risk_assessment=risk_level
     )
