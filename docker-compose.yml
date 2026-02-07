@@ -1,0 +1,97 @@
+services:
+  # ---------------------------------------------------
+  # 1. CORE INFRASTRUCTURE
+  # ---------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: biostream-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest # Upgraded to latest stable
+    container_name: biostream-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      # Map ports to host so you can check buckets locally
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Auto-create buckets script
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET_RAW};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET_ARCHIVE};
+      exit 0;
+      "
+
+  # ---------------------------------------------------
+  # 2. APPLICATION SERVICES
+  # ---------------------------------------------------
+  backend:
+    build: ./src/backend
+    container_name: biostream-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file: .env # Reads root .env
+    environment:
+      # Override config to ensure it points to docker containers
+      POSTGRES_HOST: postgres
+      MINIO_ENDPOINT: minio:9000
+    ports:
+      - "8000:8000" # Expose API to Host
+
+  frontend:
+    build: ./src/frontend
+    container_name: biostream-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80" # Map Nginx port 80 to Host 3000
+
+  simulator:
+    build: ./src/simulator
+    container_name: biostream-simulator
+    restart: always
+    depends_on:
+      - backend
+    # Override the API URL inside the Go container
+    environment:
+      API_URL: "http://backend:8000/api/v1/telemetry" 
+
+volumes:
+  postgres_data:
+  minio_data:

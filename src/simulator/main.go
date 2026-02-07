@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
 
-const (
-	API_URL       = "http://localhost:8000/api/v1/telemetry"
+var (
+	// Configuration: Checks ENV first (Docker), defaults to localhost (Local Dev)
+	API_URL       = getEnv("API_URL", "http://localhost:8000/api/v1/telemetry")
 	DEVICE_COUNT  = 10
 	SEND_INTERVAL = 1 * time.Second
 )
@@ -22,8 +24,8 @@ var httpClient = &http.Client{
 }
 
 func main() {
-	fmt.Printf("🚀 Starting BioStream Simulator with %d devices...\n", DEVICE_COUNT)
-	fmt.Printf("📡 Target: %s\n", API_URL)
+	fmt.Printf("Starting BioStream Simulator with %d devices...\n", DEVICE_COUNT)
+	fmt.Printf("Target: %s\n", API_URL)
 
 	var wg sync.WaitGroup
 
@@ -86,4 +88,12 @@ func sendTelemetry(data TelemetryPayload) error {
 	}
 
 	return fmt.Errorf("max retries exceeded")
+}
+
+// Helper to read environment variables with a fallback
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return fallback
 }
