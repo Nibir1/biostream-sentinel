@@ -1,0 +1,88 @@
+name: BioStream CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # ------------------------------------------------------------------
+  # JOB 1: Backend Quality Assurance
+  # ------------------------------------------------------------------
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/backend
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    - name: Install Dependencies
+      run: |
+        pip install uv
+        uv pip install --system ".[test]"  # Install project + test deps
+    
+    - name: Run Pytest (Unit Tests)
+      env:
+        # Mock Envs for Testing
+        OPENAI_API_KEY: "mock-key" 
+        POSTGRES_HOST: "localhost"
+        MINIO_ENDPOINT: "localhost:9000"
+      run: |
+        pytest -v
+
+  # ------------------------------------------------------------------
+  # JOB 2: Frontend Quality Assurance
+  # ------------------------------------------------------------------
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: src/frontend/package-lock.json
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Run Vitest
+      run: npm test -- --run
+
+    - name: Build Production Bundle
+      run: npm run build
+
+  # ------------------------------------------------------------------
+  # JOB 3: Simulator Build Check
+  # ------------------------------------------------------------------
+  simulator-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/simulator
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go 1.22
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Build Simulator Binary
+      run: go build -v ./...
