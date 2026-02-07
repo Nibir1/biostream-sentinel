@@ -5,6 +5,8 @@ from app.core.logging import setup_logging, CorrelationIdMiddleware
 from app.api.v1 import ingestion
 from app.services.detector import detector # Import detector
 from app.services.storage import storage # Import storage
+from fastapi.middleware.cors import CORSMiddleware # Import this for CORS
+from app.api.v1 import ingestion, analytics
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,8 +31,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Allow Frontend to communicate with Backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"], # Vite default port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.add_middleware(CorrelationIdMiddleware)
 app.include_router(ingestion.router, prefix=settings.API_PREFIX, tags=["Ingestion"])
+app.include_router(analytics.router, prefix=settings.API_PREFIX, tags=["Analytics"])
 
 @app.get("/health")
 async def health_check():

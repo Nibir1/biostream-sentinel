@@ -122,5 +122,20 @@ class StorageService:
         except Exception as e:
             logger.error(f"ARCHIVE ERROR: Failed to flush to MinIO: {e}")
 
+    async def get_recent_anomalies(self, limit: int = 20):
+        """Fetches the most recent high-risk events for the dashboard."""
+        if not self.pool:
+            return []
+            
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch('''
+                SELECT device_id, risk_level, anomaly_score, detected_at
+                FROM anomalies
+                ORDER BY detected_at DESC
+                LIMIT $1
+            ''', limit)
+            
+            return [dict(row) for row in rows]
+
 # Singleton
 storage = StorageService()
