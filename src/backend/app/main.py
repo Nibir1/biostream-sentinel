@@ -4,16 +4,23 @@ from app.core.config import settings
 from app.core.logging import setup_logging, CorrelationIdMiddleware
 from app.api.v1 import ingestion
 from app.services.detector import detector # Import detector
+from app.services.storage import storage # Import storage
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     
+    # Connect to DB & MinIO
+    await storage.connect()
+
     # Train the AI model on startup
     detector.train_baseline()
     
     print(f"Starting {settings.PROJECT_NAME}...")
     yield
+
+    # Close connections
+    await storage.close()
     print("Shutting down...")
 
 app = FastAPI(

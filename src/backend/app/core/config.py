@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     # Security
     PII_SALT: str = "default_unsafe_salt_for_dev"
 
+    # MinIO
+    MINIO_ENDPOINT: str = "localhost:9000" # Use 'minio:9000' in docker, 'localhost' for local dev
+    MINIO_ROOT_USER: str = "minio_admin"
+    MINIO_ROOT_PASSWORD: str = "minio_secure_pass"
+    MINIO_BUCKET_RAW: str = "telemetry-raw"
+
     # Directs Pydantic to look for .env in the infra folder if running locally
     model_config = SettingsConfigDict(
         env_file="../../../infra/.env", 

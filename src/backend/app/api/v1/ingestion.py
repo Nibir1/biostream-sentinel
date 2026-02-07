@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from app.domain.schemas import TelemetryPayload, IngestionResponse
 from app.services.detector import detector # Import the singleton
+from app.services.storage import storage # Import storage
 import logging
 
 router = APIRouter()
@@ -20,6 +21,7 @@ async def ingest_telemetry(payload: TelemetryPayload, request: Request):
     )
     
     risk_level = analysis["risk_level"]
+    score = float(analysis["anomaly_score"]) # Ensure float for DB
     
     # 2. Logging with Context
     log_payload = {
@@ -29,6 +31,10 @@ async def ingest_telemetry(payload: TelemetryPayload, request: Request):
         "score": f"{analysis['anomaly_score']:.4f}"
     }
     
+    # 3. Persistence (Async)
+    # In a real app, use BackgroundTasks. Here we await to ensure data safety for the demo.
+    await storage.store_telemetry(payload, risk_level, score)
+
     # FORCE PRINT TO CONSOLE FOR DEMO PURPOSES
     if risk_level == "HIGH":
         print(f"🚨 [ALERT] High Risk Detected! Device: {payload.device_id} | HR: {payload.heart_rate} | Score: {log_payload['score']}")
